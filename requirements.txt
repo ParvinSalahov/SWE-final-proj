@@ -4,6 +4,7 @@
 
 numpy>=1.24
 pydantic>=2.7
+fastapi
 
 # Pick ONE or more depending on which provider(s) you intend to use.
 # (None of these are imported until the corresponding provider is selected.)
