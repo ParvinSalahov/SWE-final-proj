@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     )
 
     # Logging
-    LOG_LEVEL: str = Field(default="INFO", description="Logging level: DEBUG, INFO, WARNING, ERROR")
+    LOG_LEVEL: str = Field(
+        default="INFO", description="Logging level: DEBUG, INFO, WARNING, ERROR"
+    )
 
     # Storage & Limits
     IMAGE_STORAGE_DIR: Path = Field(
@@ -44,15 +46,32 @@ class Settings(BaseSettings):
     HTTP_PORT: int = Field(default=8000, description="Port for HTTP server")
 
     # AI Provider Settings (read by ai/ package and wrappers)
-    LLM_PROVIDER: str = Field(default="anthropic", description="anthropic | openai | gemini")
-    LLM_MODEL: str = Field(default="claude-sonnet-4-6", description="Provider-specific model ID")
+    LLM_PROVIDER: str = Field(
+        default="anthropic", description="anthropic | openai | gemini"
+    )
+    LLM_MODEL: str = Field(
+        default="claude-sonnet-4-6", description="Provider-specific model ID"
+    )
     EMBEDDING_PROVIDER: str = Field(default="openai", description="openai | gemini")
-    EMBEDDING_MODEL: str = Field(default="text-embedding-3-small", description="Embedding model ID")
+    EMBEDDING_MODEL: str = Field(
+        default="text-embedding-3-small", description="Embedding model ID"
+    )
 
     # Robustness / Retries
-    AI_MAX_RETRIES: int = Field(default=3, description="Maximum retry attempts on transient AI failures")
-    AI_RETRY_MIN_WAIT: float = Field(default=1.0, description="Initial retry backoff wait in seconds")
-    AI_RETRY_MAX_WAIT: float = Field(default=8.0, description="Max retry backoff wait in seconds")
+    AI_MAX_RETRIES: int = Field(
+        default=3, description="Maximum retry attempts on transient AI failures"
+    )
+    AI_RETRY_MIN_WAIT: float = Field(
+        default=1.0, description="Initial retry backoff wait in seconds"
+    )
+    AI_RETRY_MAX_WAIT: float = Field(
+        default=8.0, description="Max retry backoff wait in seconds"
+    )
+
+    # Offline Mode
+    OFFLINE_MODE: bool = Field(
+        default=False, description="Disable AI processing for testing/demo purposes"
+    )
 
     @property
     def max_image_size_bytes(self) -> int:
