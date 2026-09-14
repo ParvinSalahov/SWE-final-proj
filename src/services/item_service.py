@@ -86,10 +86,14 @@ def validate_image_bytes(data: bytes, filename: str = "") -> str:
     # Corruption / truncation check
     if mime_type == "image/jpeg":
         if len(data) < 4 or (b"\xff\xd9" not in data[-10:] and b"\xff\xd9" not in data):
-            raise CorruptImageError("Corrupt or truncated JPEG image: missing EOF marker")
+            raise CorruptImageError(
+                "Corrupt or truncated JPEG image: missing EOF marker"
+            )
     elif mime_type == "image/png":
         if len(data) < 24:
-            raise CorruptImageError("Corrupt PNG image: file too small to contain valid headers")
+            raise CorruptImageError(
+                "Corrupt PNG image: file too small to contain valid headers"
+            )
 
     return mime_type
 
@@ -103,7 +107,9 @@ def generate_match_reason(query: ItemDescription, candidate: ItemDescription) ->
     else:
         reasons.append(f"Categories: {query.object_class} ~ {candidate.object_class}")
 
-    common_colors = set(c.lower() for c in query.colors) & set(c.lower() for c in candidate.colors)
+    common_colors = set(c.lower() for c in query.colors) & set(
+        c.lower() for c in candidate.colors
+    )
     if common_colors:
         reasons.append(f"Matching color(s): {', '.join(sorted(common_colors))}")
 
@@ -161,12 +167,16 @@ class ItemService:
         except Exception as exc:
             if saved_image_path.exists():
                 saved_image_path.unlink()
-            raise ItemServiceError(f"Failed to analyze item image with VLM: {exc}") from exc
+            raise ItemServiceError(
+                f"Failed to analyze item image with VLM: {exc}"
+            ) from exc
 
         # Generate search embedding
         search_text = description.to_search_text()
         try:
-            embedding_vec = self.ai_service.get_embedding(search_text, embedder=embedder)
+            embedding_vec = self.ai_service.get_embedding(
+                search_text, embedder=embedder
+            )
         except Exception as exc:
             if saved_image_path.exists():
                 saved_image_path.unlink()
@@ -205,11 +215,19 @@ class ItemService:
     def find_matches(self, item_id: str, k: int = 3) -> MatchQueryResponse:
         """Find top-k matches from the opposite pool using cosine similarity."""
         query_item = self.get_item(item_id)
-        target_status = ItemStatus.FOUND if query_item.status == ItemStatus.LOST else ItemStatus.LOST
+        target_status = (
+            ItemStatus.FOUND
+            if query_item.status == ItemStatus.LOST
+            else ItemStatus.LOST
+        )
 
         # TODO (Task 3 - Storage): Query candidates from repository via self.repository.list_by_status(target_status)
         # TODO (Task 4 - Concurrency): If candidate pool is large, parallelize batch similarity scoring
-        candidates = [item for item in self._items.values() if item.status == target_status and item.embedding is not None]
+        candidates = [
+            item
+            for item in self._items.values()
+            if item.status == target_status and item.embedding is not None
+        ]
 
         query_response = ItemResponse(
             id=query_item.id,
