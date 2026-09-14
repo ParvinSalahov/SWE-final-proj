@@ -37,7 +37,19 @@ def is_transient_error(exc: BaseException) -> bool:
     if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
         return True
     msg = str(exc).lower()
-    return any(marker in msg for marker in ["429", "rate limit", "500", "502", "503", "504", "timeout", "timed out"])
+    return any(
+        marker in msg
+        for marker in [
+            "429",
+            "rate limit",
+            "500",
+            "502",
+            "503",
+            "504",
+            "timeout",
+            "timed out",
+        ]
+    )
 
 
 class AIService:
@@ -49,8 +61,12 @@ class AIService:
         max_concurrent_requests: int = 5,
     ):
         self.cache_enabled = cache_enabled
-        self._embedding_cache: dict[str, np.ndarray] = {}  # Cache for search_text -> np.ndarray
-        self._semaphore = asyncio.Semaphore(max_concurrent_requests)  # Concurrency bound to avoid hitting provider rate limits
+        self._embedding_cache: dict[
+            str, np.ndarray
+        ] = {}  # Cache for search_text -> np.ndarray
+        self._semaphore = asyncio.Semaphore(
+            max_concurrent_requests
+        )  # Concurrency bound to avoid hitting provider rate limits
 
     def describe_item(
         self,
@@ -60,6 +76,7 @@ class AIService:
         vlm: Any = None,
     ) -> ItemDescription:
         """Call VLM to describe an item, wrapped with exponential backoff and timings."""
+
         @retry(
             reraise=True,
             stop=stop_after_attempt(settings.AI_MAX_RETRIES),
@@ -71,7 +88,9 @@ class AIService:
         )
         def _call_vlm() -> ItemDescription:
             start_time = time.perf_counter()
-            logger.info("Calling VLM for image: %s (user_text=%r)", image_path, user_text)
+            logger.info(
+                "Calling VLM for image: %s (user_text=%r)", image_path, user_text
+            )
             res = ai.describe_item(image_path, user_text, vlm=vlm)
             elapsed = time.perf_counter() - start_time
             logger.info(
@@ -109,7 +128,9 @@ class AIService:
         )
         def _call_embed() -> np.ndarray:
             start_time = time.perf_counter()
-            logger.info("Generating embedding for text: %r (len=%d)", cache_key[:60], len(text))
+            logger.info(
+                "Generating embedding for text: %r (len=%d)", cache_key[:60], len(text)
+            )
             vec = ai.embed(text, embedder=embedder)
             elapsed = time.perf_counter() - start_time
             logger.info("Embedding completed in %.2fs (dim=%d)", elapsed, len(vec))
@@ -129,7 +150,9 @@ class AIService:
     ) -> ItemDescription:
         """Async version respecting concurrency semaphore."""
         async with self._semaphore:
-            return await asyncio.to_thread(self.describe_item, image_path, user_text, vlm=vlm)
+            return await asyncio.to_thread(
+                self.describe_item, image_path, user_text, vlm=vlm
+            )
 
     async def get_embedding_async(
         self,

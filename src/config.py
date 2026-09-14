@@ -1,9 +1,3 @@
-"""Application configuration management using pydantic-settings.
-
-Loads configuration from environment variables and an optional .env file.
-Exposes typed settings to the entire codebase.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -86,6 +80,12 @@ class Settings(BaseSettings):
     AI_RETRY_MAX_WAIT: float = Field(
         default=8.0,
         description="Max retry backoff wait in seconds",
+    )
+
+    # Offline Mode
+    OFFLINE_MODE: bool = Field(
+        default=False,
+        description="Disable AI processing for testing/demo purposes",
     )
 
     @property
