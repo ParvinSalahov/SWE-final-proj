@@ -16,14 +16,14 @@ from fastapi import FastAPI, File, Form, HTTPException, Path, Query, UploadFile,
 
 from src.config import configure_logging
 from src.models import ItemResponse, ItemStatus, MatchQueryResponse
-from src.services.item_service import (
+from src.core.item_manager import (
     CorruptImageError,
     ImageTooLargeError,
     InvalidImageError,
     ItemNotFoundError,
     ItemRecord,
-    ItemService,
-    ItemServiceError,
+    ItemManager,
+    ItemManagerError,
 )
 
 # Initialize logging and core services
@@ -36,7 +36,7 @@ app = FastAPI(
 )
 
 # Shared service instance
-service = ItemService()
+service = ItemManager()
 
 
 def _to_response(item: ItemRecord) -> ItemResponse:
@@ -90,7 +90,7 @@ async def register_lost_item(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
-    except ItemServiceError as exc:
+    except ItemManagerError as exc:
         logger.exception("Failed to register lost item: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
@@ -130,7 +130,7 @@ async def register_found_item(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
-    except ItemServiceError as exc:
+    except ItemManagerError as exc:
         logger.exception("Failed to register found item: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)

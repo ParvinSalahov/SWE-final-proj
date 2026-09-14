@@ -36,15 +36,15 @@ JPEG_MAGIC = b"\xff\xd8\xff"
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
-class ItemServiceError(Exception):
-    """Base exception for ItemService errors."""
+class ItemManagerError(Exception):
+    """Base exception for ItemManager errors."""
 
 
-class ItemNotFoundError(ItemServiceError):
+class ItemNotFoundError(ItemManagerError):
     """Raised when an item ID does not exist."""
 
 
-class InvalidImageError(ItemServiceError):
+class InvalidImageError(ItemManagerError):
     """Raised when an uploaded image fails validation."""
 
 
@@ -120,8 +120,15 @@ def generate_match_reason(query: ItemDescription, candidate: ItemDescription) ->
     return "; ".join(reasons) if reasons else "High visual and textual similarity"
 
 
-class ItemService:
-    """Core domain service for item management and similarity matching."""
+class ItemManager:
+    """Core domain manager for item management and similarity matching.
+
+    This class handles the business logic for:
+    - Image validation (MIME types, size limits, corruption detection)
+    - File storage for image blobs
+    - Coordination with AIService (VLM extraction + embeddings)
+    - Item registration, listing, and top-k similarity matching
+    """
 
     def __init__(
         self,
@@ -167,7 +174,7 @@ class ItemService:
         except Exception as exc:
             if saved_image_path.exists():
                 saved_image_path.unlink()
-            raise ItemServiceError(
+            raise ItemManagerError(
                 f"Failed to analyze item image with VLM: {exc}"
             ) from exc
 
@@ -180,7 +187,7 @@ class ItemService:
         except Exception as exc:
             if saved_image_path.exists():
                 saved_image_path.unlink()
-            raise ItemServiceError(f"Failed to generate embedding: {exc}") from exc
+            raise ItemManagerError(f"Failed to generate embedding: {exc}") from exc
 
         # Create ItemRecord and persist
         record = ItemRecord(
