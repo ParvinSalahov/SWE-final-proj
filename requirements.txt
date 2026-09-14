@@ -4,7 +4,11 @@
 
 numpy>=1.24
 pydantic>=2.7
-fastapi
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+pydantic-settings>=2.2.0
+tenacity>=8.2.0
 
 # Pick ONE or more depending on which provider(s) you intend to use.
 # (None of these are imported until the corresponding provider is selected.)
