@@ -68,6 +68,11 @@ class Settings(BaseSettings):
         default=8.0, description="Max retry backoff wait in seconds"
     )
 
+    # Offline Mode
+    OFFLINE_MODE: bool = Field(
+        default=False, description="Disable AI processing for testing/demo purposes"
+    )
+
     @property
     def max_image_size_bytes(self) -> int:
         """Calculate maximum image size in bytes."""
