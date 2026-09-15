@@ -1,7 +1,7 @@
 """Domain business logic for managing lost and found items.
 
 Handles:
-- Image validation (MIME types, size limits, corruption detection)
+- Image validation (MIME types, size limits, corruption detection via Pillow)
 - File storage for image blobs
 - Coordination with AIService (VLM extraction + embeddings)
 - Item registration, listing, and top-k similarity matching
@@ -9,12 +9,14 @@ Handles:
 
 from __future__ import annotations
 
+import io
 import logging
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from PIL import Image, UnidentifiedImageError
 
 import ai
 from ai.schemas import ItemDescription
@@ -70,10 +72,10 @@ def validate_image_bytes(data: bytes, filename: str = "") -> str:
     max_bytes = settings.max_image_size_bytes
     if len(data) > max_bytes:
         raise ImageTooLargeError(
-            f"Image size ({len(data)} bytes) exceeds the {settings.MAX_IMAGE_SIZE_MB}MB limit ({max_bytes} bytes)"
+            f"Image size ({len(data)} bytes) exceeds the limit of {settings.max_file_size_mb}MB ({max_bytes} bytes)"
         )
 
-    # Magic byte header check
+    # 1. Magic byte header check
     if data.startswith(JPEG_MAGIC):
         mime_type = "image/jpeg"
     elif data.startswith(PNG_MAGIC):
@@ -83,17 +85,24 @@ def validate_image_bytes(data: bytes, filename: str = "") -> str:
             f"Unsupported image format for '{filename}'. Only JPEG and PNG are allowed."
         )
 
-    # Corruption / truncation check
+    # 2. EOF marker & structural minimum checks
     if mime_type == "image/jpeg":
         if len(data) < 4 or (b"\xff\xd9" not in data[-10:] and b"\xff\xd9" not in data):
-            raise CorruptImageError(
-                "Corrupt or truncated JPEG image: missing EOF marker"
-            )
+            raise CorruptImageError("Corrupt or truncated JPEG image: missing EOF marker")
     elif mime_type == "image/png":
         if len(data) < 24:
-            raise CorruptImageError(
-                "Corrupt PNG image: file too small to contain valid headers"
-            )
+            raise CorruptImageError("Corrupt PNG image: file too small to contain valid headers")
+
+    # 3. Deep decoding verification via Pillow (catches truncated/fake payloads)
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img.verify()
+            if mime_type == "image/jpeg" and img.format != "JPEG":
+                raise CorruptImageError("MIME header says JPEG but internal image format does not match")
+            if mime_type == "image/png" and img.format != "PNG":
+                raise CorruptImageError("MIME header says PNG but internal image format does not match")
+    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+        raise CorruptImageError(f"Corrupt or unreadable image file: {exc}") from exc
 
     return mime_type
 
@@ -121,26 +130,16 @@ def generate_match_reason(query: ItemDescription, candidate: ItemDescription) ->
 
 
 class ItemManager:
-    """Core domain manager for item management and similarity matching.
-
-    This class handles the business logic for:
-    - Image validation (MIME types, size limits, corruption detection)
-    - File storage for image blobs
-    - Coordination with AIService (VLM extraction + embeddings)
-    - Item registration, listing, and top-k similarity matching
-    """
+    """Core domain manager for item management and similarity matching."""
 
     def __init__(
         self,
         storage_dir: Path | str | None = None,
         ai_service: AIService | None = None,
     ):
-        self.storage_dir = Path(storage_dir or settings.IMAGE_STORAGE_DIR)
+        self.storage_dir = Path(storage_dir or settings.upload_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.ai_service = ai_service or AIService()
-
-        # In-memory storage repository (easily swappable with database)
-        # TODO (Task 3 - Storage): Replace this in-memory dict with self.repository: ItemRepository from src.storage.repository (PostgreSQL/AsyncPG)
         self._items: dict[str, ItemRecord] = {}
 
     def register_item(
@@ -198,21 +197,18 @@ class ItemManager:
             description=description,
             embedding=embedding_vec.tolist(),
         )
-        # TODO (Task 3 - Storage): Replace dictionary assignment with self.repository.save(record)
         self._items[item_id] = record
         logger.info("Registered %s item with ID: %s", status.value, item_id)
         return record
 
     def get_item(self, item_id: str) -> ItemRecord:
         """Fetch item by ID or raise ItemNotFoundError."""
-        # TODO (Task 3 - Storage): Replace dictionary lookup with self.repository.get_by_id(item_id)
         if item_id not in self._items:
             raise ItemNotFoundError(f"Item with ID '{item_id}' not found")
         return self._items[item_id]
 
     def list_items(self, status: ItemStatus | None = None) -> list[ItemRecord]:
         """List items, optionally filtered by status, sorted latest first."""
-        # TODO (Task 3 - Storage): Replace in-memory list with self.repository.list_all(status)
         items = list(self._items.values())
         if status is not None:
             items = [item for item in items if item.status == status]
@@ -228,8 +224,6 @@ class ItemManager:
             else ItemStatus.LOST
         )
 
-        # TODO (Task 3 - Storage): Query candidates from repository via self.repository.list_by_status(target_status)
-        # TODO (Task 4 - Concurrency): If candidate pool is large, parallelize batch similarity scoring
         candidates = [
             item
             for item in self._items.values()
