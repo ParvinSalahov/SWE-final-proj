@@ -9,11 +9,14 @@ Endpoints:
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import logging
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Path, Query, UploadFile, status
 
+from src.storage.database import create_tables
 from src.config import configure_logging
 from src.models import ItemResponse, ItemStatus, MatchQueryResponse
 from src.core.item_manager import (
@@ -30,9 +33,15 @@ from src.core.item_manager import (
 configure_logging()
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await create_tables()
+    yield
+
 app = FastAPI(
     title="Smart Lost & Found API",
     description="Vision-language AI service to register and match lost and found items.",
+    lifespan=lifespan,
 )
 
 # Shared service instance
@@ -75,7 +84,7 @@ async def register_lost_item(
     """Upload an image and description of a lost item."""
     try:
         image_bytes = await image.read()
-        item = service.register_item(
+        item = await service.register_item(
             status=ItemStatus.LOST,
             image_bytes=image_bytes,
             filename=image.filename or "lost.jpg",
@@ -115,7 +124,7 @@ async def register_found_item(
     """Upload an image and description of a found item."""
     try:
         image_bytes = await image.read()
-        item = service.register_item(
+        item = await service.register_item(
             status=ItemStatus.FOUND,
             image_bytes=image_bytes,
             filename=image.filename or "found.jpg",
@@ -151,7 +160,7 @@ async def get_item_matches(
 ) -> MatchQueryResponse:
     """Find the top-k most likely matches from the opposite pool."""
     try:
-        return service.find_matches(item_id=id, k=k)
+        return await service.find_matches(item_id=id, k=k)
     except ItemNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -169,11 +178,11 @@ async def get_item_matches(
     tags=["Items"],
     summary="List items",
 )
-def list_items(
+async def list_items(
     status: Annotated[
         ItemStatus | None, Query(description="Filter by item status (lost or found)")
     ] = None,
 ) -> list[ItemResponse]:
     """List all registered items, optionally filtered by status (lost/found)."""
-    items = service.list_items(status=status)
+    items = await service.list_items(status=status)
     return [_to_response(item) for item in items]
