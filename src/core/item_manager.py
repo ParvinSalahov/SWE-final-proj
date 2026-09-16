@@ -29,6 +29,8 @@ from src.models import (
     MatchQueryResponse,
 )
 from src.services.ai_service import AIService
+from src.storage.image_storage import ImageStorage
+from src.storage.repository import BaseItemRepository, PostgresItemRepository
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +74,8 @@ def validate_image_bytes(data: bytes, filename: str = "") -> str:
     max_bytes = settings.max_image_size_bytes
     if len(data) > max_bytes:
         raise ImageTooLargeError(
-            f"Image size ({len(data)} bytes) exceeds the limit of {settings.max_file_size_mb}MB ({max_bytes} bytes)"
+            f"Image size ({len(data)} bytes) exceeds the limit of "
+            f"{settings.max_file_size_mb}MB ({max_bytes} bytes)"
         )
 
     # 1. Magic byte header check
@@ -82,45 +85,69 @@ def validate_image_bytes(data: bytes, filename: str = "") -> str:
         mime_type = "image/png"
     else:
         raise InvalidImageError(
-            f"Unsupported image format for '{filename}'. Only JPEG and PNG are allowed."
+            f"Unsupported image format for '{filename}'. "
+            "Only JPEG and PNG are allowed."
         )
 
     # 2. EOF marker & structural minimum checks
     if mime_type == "image/jpeg":
-        if len(data) < 4 or (b"\xff\xd9" not in data[-10:] and b"\xff\xd9" not in data):
-            raise CorruptImageError("Corrupt or truncated JPEG image: missing EOF marker")
+        if len(data) < 4 or (
+            b"\xff\xd9" not in data[-10:] and b"\xff\xd9" not in data
+        ):
+            raise CorruptImageError(
+                "Corrupt or truncated JPEG image: missing EOF marker"
+            )
     elif mime_type == "image/png":
         if len(data) < 24:
-            raise CorruptImageError("Corrupt PNG image: file too small to contain valid headers")
+            raise CorruptImageError(
+                "Corrupt PNG image: file too small to contain valid headers"
+            )
 
-    # 3. Deep decoding verification via Pillow (catches truncated/fake payloads)
+    # 3. Deep decoding verification via Pillow
     try:
         with Image.open(io.BytesIO(data)) as img:
             img.verify()
+
             if mime_type == "image/jpeg" and img.format != "JPEG":
-                raise CorruptImageError("MIME header says JPEG but internal image format does not match")
+                raise CorruptImageError(
+                    "MIME header says JPEG but internal image format does not match"
+                )
+
             if mime_type == "image/png" and img.format != "PNG":
-                raise CorruptImageError("MIME header says PNG but internal image format does not match")
+                raise CorruptImageError(
+                    "MIME header says PNG but internal image format does not match"
+                )
+
     except (UnidentifiedImageError, OSError, SyntaxError) as exc:
-        raise CorruptImageError(f"Corrupt or unreadable image file: {exc}") from exc
+        raise CorruptImageError(
+            f"Corrupt or unreadable image file: {exc}"
+        ) from exc
 
     return mime_type
 
 
-def generate_match_reason(query: ItemDescription, candidate: ItemDescription) -> str:
+def generate_match_reason(
+    query: ItemDescription,
+    candidate: ItemDescription,
+) -> str:
     """Generate human-readable explanation for why two items matched."""
     reasons: list[str] = []
 
     if query.object_class.lower() == candidate.object_class.lower():
         reasons.append(f"Identical category: {query.object_class}")
     else:
-        reasons.append(f"Categories: {query.object_class} ~ {candidate.object_class}")
+        reasons.append(
+            f"Categories: {query.object_class} ~ {candidate.object_class}"
+        )
 
     common_colors = set(c.lower() for c in query.colors) & set(
         c.lower() for c in candidate.colors
     )
+
     if common_colors:
-        reasons.append(f"Matching color(s): {', '.join(sorted(common_colors))}")
+        reasons.append(
+            f"Matching color(s): {', '.join(sorted(common_colors))}"
+        )
 
     if query.brand and candidate.brand:
         if query.brand.lower() == candidate.brand.lower():
@@ -136,137 +163,201 @@ class ItemManager:
         self,
         storage_dir: Path | str | None = None,
         ai_service: AIService | None = None,
+        repository: BaseItemRepository | None = None,
+        image_storage: ImageStorage | None = None,
     ):
-        self.storage_dir = Path(storage_dir or settings.upload_dir)
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.ai_service = ai_service or AIService()
-        self._items: dict[str, ItemRecord] = {}
 
-    def register_item(
-        self,
-        status: ItemStatus,
-        image_bytes: bytes,
-        filename: str,
-        user_text: str,
-        *,
-        vlm: Any = None,
-        embedder: Any = None,
+        self.repository = repository or PostgresItemRepository()
+
+        self.image_storage = image_storage or ImageStorage(
+            Path(storage_dir) if storage_dir else None
+        )
+
+    async def register_item(
+            self,
+            status: ItemStatus,
+            image_bytes: bytes,
+            filename: str,
+            user_text: str,
+            *,
+            vlm: Any = None,
+            embedder: Any = None,
     ) -> ItemRecord:
         """Validate, persist image blob, run AI extraction, and store item."""
+
+        # 1. Validate image
         mime = validate_image_bytes(image_bytes, filename=filename)
         ext = ".jpg" if mime == "image/jpeg" else ".png"
 
-        item_id = str(uuid4())
-        safe_filename = f"{item_id}{ext}"
-        saved_image_path = self.storage_dir / safe_filename
-
-        # Persist image blob to filesystem
-        saved_image_path.write_bytes(image_bytes)
-
-        # Call AI Service for VLM analysis
+        # 2. Save image to filesystem
         try:
-            description = self.ai_service.describe_item(
-                str(saved_image_path),
+            saved_image_path = self.image_storage.save(
+                image_bytes,
+                ext,
+            )
+        except OSError as exc:
+            raise ItemManagerError(
+                f"Failed to save image: {exc}"
+            ) from exc
+
+        # 3. Analyze image with VLM
+        try:
+            description = await self.ai_service.describe_item_async(
+                saved_image_path,
                 user_text,
                 vlm=vlm,
             )
         except Exception as exc:
-            if saved_image_path.exists():
-                saved_image_path.unlink()
+            self.image_storage.delete(saved_image_path)
             raise ItemManagerError(
                 f"Failed to analyze item image with VLM: {exc}"
             ) from exc
 
-        # Generate search embedding
+        # 4. Generate search embedding
         search_text = description.to_search_text()
+
         try:
-            embedding_vec = self.ai_service.get_embedding(
-                search_text, embedder=embedder
+            embedding_vec = await self.ai_service.get_embedding_async(
+                search_text,
+                embedder=embedder,
             )
         except Exception as exc:
-            if saved_image_path.exists():
-                saved_image_path.unlink()
-            raise ItemManagerError(f"Failed to generate embedding: {exc}") from exc
+            self.image_storage.delete(saved_image_path)
+            raise ItemManagerError(
+                f"Failed to generate embedding: {exc}"
+            ) from exc
 
-        # Create ItemRecord and persist
+        # 5. Create item record
+        item_id = str(uuid4())
+
         record = ItemRecord(
             id=item_id,
             status=status,
             user_text=user_text,
-            image_path=str(saved_image_path),
+            image_path=saved_image_path,
             description=description,
             embedding=embedding_vec.tolist(),
         )
-        self._items[item_id] = record
-        logger.info("Registered %s item with ID: %s", status.value, item_id)
+
+        # 6. Persist metadata in PostgreSQL
+        try:
+            await self.repository.save(record)
+        except Exception as exc:
+            self.image_storage.delete(saved_image_path)
+            raise ItemManagerError(
+                f"Failed to save item to database: {exc}"
+            ) from exc
+
+        logger.info(
+            "Registered %s item with ID: %s",
+            status.value,
+            item_id,
+        )
+
         return record
 
-    def get_item(self, item_id: str) -> ItemRecord:
-        """Fetch item by ID or raise ItemNotFoundError."""
-        if item_id not in self._items:
-            raise ItemNotFoundError(f"Item with ID '{item_id}' not found")
-        return self._items[item_id]
+    async def get_item(self, item_id: str) -> ItemRecord:
+        item = await self.repository.get_by_id(item_id)
 
-    def list_items(self, status: ItemStatus | None = None) -> list[ItemRecord]:
-        """List items, optionally filtered by status, sorted latest first."""
-        items = list(self._items.values())
-        if status is not None:
-            items = [item for item in items if item.status == status]
-        items.sort(key=lambda x: x.created_at, reverse=True)
-        return items
+        if item is None:
+            raise ItemNotFoundError(
+                f"Item with ID '{item_id}' was not found."
+            )
 
-    def find_matches(self, item_id: str, k: int = 3) -> MatchQueryResponse:
+        return item
+
+    async def list_items(
+            self,
+            status: ItemStatus | None = None,
+    ) -> list[ItemRecord]:
+        return await self.repository.list_all(status=status)
+
+    async def find_matches(
+            self,
+            item_id: str,
+            k: int = 3,
+    ) -> MatchQueryResponse:
         """Find top-k matches from the opposite pool using cosine similarity."""
-        query_item = self.get_item(item_id)
+        query_item = await self.get_item(item_id)
+
         target_status = (
             ItemStatus.FOUND
             if query_item.status == ItemStatus.LOST
             else ItemStatus.LOST
         )
 
-        candidates = [
+        candidates = await self.repository.list_all(status=target_status)
+
+        candidates_with_embeddings = [
             item
-            for item in self._items.values()
-            if item.status == target_status and item.embedding is not None
+            for item in candidates
+            if item.embedding is not None
         ]
 
-        query_response = ItemResponse(
-            id=query_item.id,
-            status=query_item.status,
-            user_text=query_item.user_text,
-            image_path=query_item.image_path,
-            description=query_item.description,
-            created_at=query_item.created_at,
+        if query_item.embedding is None:
+            return MatchQueryResponse(
+                query_item=ItemResponse.model_validate(query_item),
+                matches=[],
+                total_candidates_evaluated=len(candidates_with_embeddings),
+            )
+
+        query_vector = np.array(query_item.embedding, dtype=float)
+
+        scored_candidates: list[tuple[ItemRecord, float]] = []
+
+        for candidate in candidates_with_embeddings:
+            candidate_vector = np.array(candidate.embedding, dtype=float)
+
+            query_norm = np.linalg.norm(query_vector)
+            candidate_norm = np.linalg.norm(candidate_vector)
+
+            if query_norm == 0 or candidate_norm == 0:
+                score = 0.0
+            else:
+                score = float(
+                    np.dot(query_vector, candidate_vector)
+                    / (query_norm * candidate_norm)
+                )
+                score = max(-1, min(1, score))
+
+            scored_candidates.append((candidate, score))
+
+        scored_candidates.sort(
+            key=lambda pair: pair[1],
+            reverse=True,
         )
 
-        if not candidates or query_item.embedding is None:
-            return MatchQueryResponse(
-                query_item=query_response,
-                matches=[],
-                total_candidates_evaluated=0,
+        top_matches = scored_candidates[:k]
+
+        matches = [
+            MatchItem(
+                item=ItemResponse(
+                    id=candidate.id,
+                    status=candidate.status,
+                    user_text=candidate.user_text,
+                    image_path=candidate.image_path,
+                    description=candidate.description,
+                    created_at=candidate.created_at,
+                ),
+                score=score,
+                reason=generate_match_reason(
+                    query_item.description,
+                    candidate.description,
+                ),
             )
-
-        query_vec = np.asarray(query_item.embedding, dtype=np.float32)
-        cand_vecs = [np.asarray(c.embedding, dtype=np.float32) for c in candidates]
-
-        match_results = ai.top_k(query_vec, cand_vecs, k=k)
-
-        matches: list[MatchItem] = []
-        for res in match_results:
-            cand = candidates[res.candidate_id]
-            reason = generate_match_reason(query_item.description, cand.description)
-            cand_resp = ItemResponse(
-                id=cand.id,
-                status=cand.status,
-                user_text=cand.user_text,
-                image_path=cand.image_path,
-                description=cand.description,
-                created_at=cand.created_at,
-            )
-            matches.append(MatchItem(item=cand_resp, score=res.score, reason=reason))
+            for candidate, score in top_matches
+        ]
 
         return MatchQueryResponse(
-            query_item=query_response,
+            query_item=ItemResponse(
+                id=query_item.id,
+                status=query_item.status,
+                user_text=query_item.user_text,
+                image_path=query_item.image_path,
+                description=query_item.description,
+                created_at=query_item.created_at,
+            ),
             matches=matches,
-            total_candidates_evaluated=len(candidates),
+            total_candidates_evaluated=len(candidates_with_embeddings),
         )

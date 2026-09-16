@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from ai.providers.base import VLMProvider, EmbeddingProvider
+from PIL import Image
 
 
 class FakeVLM(VLMProvider):
@@ -49,12 +50,15 @@ class FakeEmbedder(EmbeddingProvider):
 
     def __init__(self, dim: int = 8) -> None:
         self._dim = dim
+        self.calls = 0
 
     @property
     def dimension(self) -> int:
         return self._dim
 
     def embed(self, text: str) -> np.ndarray:
+        self.calls += 1
+
         if not text.strip():
             raise ValueError("Cannot embed empty string.")
         rng = np.random.default_rng(seed=abs(hash(text)) % (2**31))
@@ -75,14 +79,10 @@ def fake_embedder() -> FakeEmbedder:
 
 @pytest.fixture
 def sample_image(tmp_path):
-    """A tiny but valid PNG file. Enough to satisfy file-existence and
-    extension checks; the FakeVLM ignores the contents."""
-    # Minimal 1x1 PNG (89 bytes). Generated once and pasted here.
-    png_bytes = bytes.fromhex(
-        "89504e470d0a1a0a0000000d49484452000000010000000108020000"
-        "00907753de0000000c4944415408d76360000000000004000146a13a"
-        "020000000049454e44ae426082"
-    )
+    """Create a tiny valid PNG image for tests."""
     p = tmp_path / "tiny.png"
-    p.write_bytes(png_bytes)
+
+    image = Image.new("RGB", (1, 1), color="black")
+    image.save(p, format="PNG")
+
     return str(p)

@@ -18,7 +18,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from dotenv import load_dotenv
 
+# Load variables from .env before importing the AI providers.
+load_dotenv()
 # Make sure `import ai` works whether you run from the topic root or elsewhere.
 sys.path.insert(0, str(Path(__file__).parent))
 
