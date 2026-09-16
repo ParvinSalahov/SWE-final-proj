@@ -94,3 +94,20 @@ Full rubric in **`SOFTWARE_PROJECT.pdf`** §8.
 **Questions?** Open an issue against the course-wide repo or email the instructor. Do not delay on a blocker.
 
 Good luck. Build something you would actually ship.
+
+## Concurrency Benchmark
+
+The batch registration pipeline uses `asyncio.gather()` with an
+`asyncio.Semaphore` to limit the number of concurrently processed items.
+
+A benchmark using 10 mock items with `max_concurrency=5` produced:
+
+| Method | Time |
+|---|---:|
+| Sequential | 0.5028 s |
+| Concurrent | 0.1009 s |
+| Speedup | 4.98x |
+
+The benchmark uses mocked item processing, so the result measures the
+concurrency pipeline itself rather than external AI provider or database
+latency.
