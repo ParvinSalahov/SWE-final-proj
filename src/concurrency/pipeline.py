@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from typing import Any
 
 from src.core.item_manager import ItemManager
 from src.models import ItemRecord
+
+
+async def _invoke_register(item_manager: Any, **kwargs) -> ItemRecord:
+    """Helper to call register_item whether it is async or synchronous."""
+    res = item_manager.register_item(**kwargs)
+    if inspect.isawaitable(res):
+        return await res
+    return await asyncio.to_thread(lambda: res)
 
 
 async def batch_register_items(
@@ -23,7 +32,6 @@ async def batch_register_items(
 
     async def register_one(item: Any) -> ItemRecord:
         async with semaphore:
-            # Model və ya dict girişini eyni dərəcədə təhlükəsiz qarşılamaq
             status = getattr(item, "status", None) or item["status"]
             image_bytes = getattr(item, "image_bytes", None) or item["image_bytes"]
             filename = getattr(item, "filename", None) or item["filename"]
@@ -35,9 +43,8 @@ async def batch_register_items(
                 else item.get("embedder")
             )
 
-            # Bloklayan sinxron metodu async mühitdə thread-də icra edirik
-            return await asyncio.to_thread(
-                item_manager.register_item,
+            return await _invoke_register(
+                item_manager,
                 status=status,
                 image_bytes=image_bytes,
                 filename=filename,
@@ -69,8 +76,8 @@ async def sequential_register_items(
             else item.get("embedder")
         )
 
-        result = await asyncio.to_thread(
-            item_manager.register_item,
+        result = await _invoke_register(
+            item_manager,
             status=status,
             image_bytes=image_bytes,
             filename=filename,
@@ -88,18 +95,17 @@ async def sequential_vs_concurrent_benchmark(
     item_manager: ItemManager,
     max_concurrency: int = 5,
 ) -> dict[str, float]:
-    """Measure sequential and concurrent batch registration time with fair cache invalidation."""
-    # 1. Ardıcıl ölçmə
-    if hasattr(item_manager.ai_service, "clear_cache"):
-        item_manager.ai_service.clear_cache()
+    """Measure sequential and concurrent batch registration time."""
+    ai_service = getattr(item_manager, "ai_service", None)
+    if ai_service and hasattr(ai_service, "clear_cache"):
+        ai_service.clear_cache()
 
     start = time.perf_counter()
     await sequential_register_items(items, item_manager)
     sequential_time = time.perf_counter() - start
 
-    # 2. Ədalətli müqayisə üçün keşi yenidən təmizləyirik
-    if hasattr(item_manager.ai_service, "clear_cache"):
-        item_manager.ai_service.clear_cache()
+    if ai_service and hasattr(ai_service, "clear_cache"):
+        ai_service.clear_cache()
 
     start = time.perf_counter()
     await batch_register_items(
