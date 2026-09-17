@@ -17,10 +17,11 @@ from typing import Annotated
 import requests
 import typer
 
-from src.config import configure_logging, settings
+from src.config import configure_logging, ensure_ai_provider_env, settings
 
 # Initialize logging
 configure_logging()
+ensure_ai_provider_env()
 logger = logging.getLogger(__name__)
 
 # Create CLI app

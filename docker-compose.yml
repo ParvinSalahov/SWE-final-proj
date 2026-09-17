@@ -25,7 +25,7 @@ services:
     container_name: lostfound-app
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://postgres:dev@postgres:5432/lostfound
+      - DATABASE_URL=postgresql+asyncpg://postgres:dev@postgres:5433/lostfound
     env_file:
       - .env
     ports:

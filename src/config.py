@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Load .env file to ensure environment variables are available for AI providers
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -47,6 +52,14 @@ class Settings(BaseSettings):
     )
 
     # AI Provider Settings
+    OPENAI_API_KEY: str | None = Field(
+        default=None,
+        description="OpenAI API key",
+    )
+    ANTHROPIC_API_KEY: str | None = Field(
+        default=None,
+        description="Anthropic API key",
+    )
     GOOGLE_API_KEY: str | None = Field(
         default=None,
         description="Google Gemini API key",
@@ -95,6 +108,20 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def ensure_ai_provider_env() -> None:
+    """Ensure environment variables are set for AI providers to use os.getenv()."""
+    if settings.OPENAI_API_KEY:
+        os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
+    if settings.ANTHROPIC_API_KEY:
+        os.environ["ANTHROPIC_API_KEY"] = settings.ANTHROPIC_API_KEY
+    if settings.GOOGLE_API_KEY:
+        os.environ["GOOGLE_API_KEY"] = settings.GOOGLE_API_KEY
+    os.environ["LLM_PROVIDER"] = settings.LLM_PROVIDER
+    os.environ["LLM_MODEL"] = settings.LLM_MODEL
+    os.environ["EMBEDDING_PROVIDER"] = settings.EMBEDDING_PROVIDER
+    os.environ["EMBEDDING_MODEL"] = settings.EMBEDDING_MODEL
 
 
 def configure_logging() -> None:

@@ -17,7 +17,7 @@ from typing import Annotated
 from fastapi import FastAPI, File, Form, HTTPException, Path, Query, UploadFile, status
 
 from src.storage.database import create_tables
-from src.config import configure_logging
+from src.config import configure_logging, ensure_ai_provider_env
 from src.models import ItemResponse, ItemStatus, MatchQueryResponse
 from src.core.item_manager import (
     CorruptImageError,
@@ -31,12 +31,15 @@ from src.core.item_manager import (
 
 # Initialize logging and core services
 configure_logging()
+ensure_ai_provider_env()
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_tables()
     yield
+
 
 app = FastAPI(
     title="Smart Lost & Found API",
