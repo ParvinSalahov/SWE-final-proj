@@ -1,0 +1,25 @@
+Benchmarking Lost & Found Application
+Environment: openai LLM, openai embeddings
+Database: postgresql+asyncpg://postgres:dev@localhost:5433/lostfound
+=== AI Provider Benchmarks ===
+
+VLM Provider:
+  Provider: OpenAIVLM
+  Model: gpt-4o-mini
+
+Embedding Provider:
+  Provider: OpenAIEmbedding
+  Model: text-embedding-3-small
+  Dimension: 1536
+  Avg embedding time: 0.901s
+
+=== Database Benchmarks ===
+  Database URL: postgresql+asyncpg://postgres:dev@localhost:5433/lostfound
+  Connection status: Connected
+
+=== Concurrency Pipeline Benchmarks ===
+  Sequential time: 0.611s
+  Concurrent time: 0.061s
+  Speedup: 9.95x
+
+=== Benchmarks Complete ===
