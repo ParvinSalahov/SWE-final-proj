@@ -1,0 +1,21 @@
+Processing LOST items (mode=online)...
+  - backpack_navy.png: backpack (0.90)
+  - keys_silver.png: drawing tool (0.90)
+  - phone_apple_black.png: smartphone (0.90)
+  - umbrella_black.png: umbrella (0.90)
+  - wallet_brown.png: wallet (0.90)
+
+Processing FOUND items...
+  - backpack_navy_2.png: backpack (0.90)
+  - book_green.png: book (0.90)
+  - keys_silver_2.png: drawing tool (0.90)
+  - phone_apple_black_2.png: mobile phone (0.90)
+  - scarf_red.png: art piece (0.80)
+  - umbrella_black_2.png: umbrella (0.90)
+  - wallet_brown_2.png: wallet (0.90)
+
+Top matches for LOST item: 'backpack_navy.png'
+  query: backpack | colors: navy blue
+  -> backpack_navy_2.png  score=+1.000
+  -> wallet_brown_2.png  score=+0.543
+  -> umbrella_black_2.png  score=+0.527
