@@ -62,7 +62,7 @@ class AIService:
         # In-memory session cache: normalized_hash -> np.ndarray
         self._embedding_cache: dict[str, np.ndarray] = {}
         
-        limit = max_concurrent_requests or getattr(settings, "max_concurrent_requests", 5)
+        limit = max_concurrent_requests or 5
         self._semaphore = asyncio.Semaphore(limit)
 
     def _normalize_key(self, text: str) -> str:
@@ -129,11 +129,7 @@ class AIService:
             start_time = time.perf_counter()
             logger.info("Embedding cache MISS. Generating embedding for text: '%.40s...'", text.strip())
             
-            # Module check: embed_text or embed
-            if hasattr(ai, "embed_text"):
-                vec = ai.embed_text(text, embedder=embedder)
-            else:
-                vec = ai.embed(text, embedder=embedder)
+            vec = ai.embed(text, embedder=embedder)
                 
             elapsed = time.perf_counter() - start_time
             logger.info("Embedding completed in %.2fs (dim=%d)", elapsed, len(vec))

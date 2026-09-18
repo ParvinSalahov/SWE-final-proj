@@ -5,10 +5,25 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
-from typing import Any
+from typing import Any, Protocol
 
-from src.core.item_manager import ItemManager
 from src.models import ItemRecord
+
+
+class ItemManagerLike(Protocol):
+    """Minimal manager interface required by the concurrency pipeline."""
+
+    def register_item(
+        self,
+        status: Any,
+        image_bytes: bytes,
+        filename: str,
+        user_text: str,
+        *,
+        vlm: Any = None,
+        embedder: Any = None,
+    ) -> Any:
+        """Register one item, synchronously or asynchronously."""
 
 
 async def _invoke_register(item_manager: Any, **kwargs) -> ItemRecord:
@@ -21,7 +36,7 @@ async def _invoke_register(item_manager: Any, **kwargs) -> ItemRecord:
 
 async def batch_register_items(
     items: list[Any],
-    item_manager: ItemManager,
+    item_manager: ItemManagerLike,
     max_concurrency: int = 5,
 ) -> list[ItemRecord]:
     """Register multiple items concurrently with bounded parallelism."""
@@ -59,7 +74,7 @@ async def batch_register_items(
 
 async def sequential_register_items(
     items: list[Any],
-    item_manager: ItemManager,
+    item_manager: ItemManagerLike,
 ) -> list[ItemRecord]:
     """Register items sequentially for benchmark comparison."""
     results: list[ItemRecord] = []
@@ -92,7 +107,7 @@ async def sequential_register_items(
 
 async def sequential_vs_concurrent_benchmark(
     items: list[Any],
-    item_manager: ItemManager,
+    item_manager: ItemManagerLike,
     max_concurrency: int = 5,
 ) -> dict[str, float]:
     """Measure sequential and concurrent batch registration time."""

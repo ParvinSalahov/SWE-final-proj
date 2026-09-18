@@ -16,7 +16,7 @@ class OpenAIVLM(VLMProvider):
     """GPT-4o via the OpenAI Chat Completions API."""
 
     def __init__(self, model: str | None = None, *, api_key: str | None = None) -> None:
-        self.model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
+        self.model: str = model or os.getenv("LLM_MODEL") or "gpt-4o-mini"
         self._api_key = api_key or os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
         if not self._api_key:
             raise ProviderError("OPENAI_API_KEY (or LLM_API_KEY) is not set.")
@@ -80,7 +80,9 @@ class OpenAIEmbedding(EmbeddingProvider):
     """OpenAI text-embedding-3-small / -large."""
 
     def __init__(self, model: str | None = None, *, api_key: str | None = None) -> None:
-        self.model = model or os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+        self.model: str = (
+            model or os.getenv("EMBEDDING_MODEL") or "text-embedding-3-small"
+        )
         self._api_key = (
             api_key
             or os.getenv("OPENAI_API_KEY")

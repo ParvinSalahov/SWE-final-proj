@@ -1,0 +1,14 @@
+{
+  "venvPath": ".",
+  "venv": "venv",
+  "include": [
+    "ai",
+    "src",
+    "scripts",
+    "tests"
+  ],
+  "exclude": [
+    "venv"
+  ],
+  "typeCheckingMode": "standard"
+}
