@@ -96,7 +96,7 @@ async def register_lost_item(
         return _to_response(item)
     except ImageTooLargeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)
         ) from exc
     except (InvalidImageError, CorruptImageError) as exc:
         raise HTTPException(
@@ -136,7 +136,7 @@ async def register_found_item(
         return _to_response(item)
     except ImageTooLargeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)
         ) from exc
     except (InvalidImageError, CorruptImageError) as exc:
         raise HTTPException(

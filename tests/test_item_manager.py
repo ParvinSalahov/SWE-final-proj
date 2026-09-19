@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
 import numpy as np
@@ -10,7 +11,7 @@ from src.storage.repository import BaseItemRepository
 
 class FakeRepository(BaseItemRepository):
     def __init__(self) -> None:
-        self.items = {}
+        self.items: dict[str, Any] = {}
 
     async def save(self, item):
         self.items[item.id] = item

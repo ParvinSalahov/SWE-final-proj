@@ -7,6 +7,7 @@ import struct
 
 from sqlalchemy import select
 
+from ai.schemas import ItemDescription
 from src.models import ItemRecord, ItemStatus
 from src.storage.database import ItemDB, SessionLocal
 
@@ -69,7 +70,7 @@ class PostgresItemRepository(BaseItemRepository):
             status=ItemStatus(row.status),
             user_text=row.user_text,
             image_path=row.image_path,
-            description=row.description,
+            description=ItemDescription.model_validate(row.description),
             embedding=PostgresItemRepository._embedding_from_bytes(
                 row.embedding
             ),

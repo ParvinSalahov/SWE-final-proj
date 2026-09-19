@@ -75,7 +75,7 @@ def validate_image_bytes(data: bytes, filename: str = "") -> str:
     if len(data) > max_bytes:
         raise ImageTooLargeError(
             f"Image size ({len(data)} bytes) exceeds the limit of "
-            f"{settings.max_file_size_mb}MB ({max_bytes} bytes)"
+            f"{settings.MAX_IMAGE_SIZE_MB}MB ({max_bytes} bytes)"
         )
 
     # 1. Magic byte header check
