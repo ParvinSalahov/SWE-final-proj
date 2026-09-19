@@ -1,364 +1,155 @@
-# Smart Lost & Found
+# Smart Lost & Found Service
 
-> An image-based lost-and-found service that uses a vision-language model and
-> embedding similarity to register items and find likely matches.
+> A small, production-minded lost-and-found matching service that combines image validation, VLM-based description extraction, embedding similarity, and a bounded async concurrency pipeline for scalable batch processing.
 
-**Team:** Repository Team
-**Topic:** Topic 1 -- Lost and Found
-**Course:** AI-ENG-110 Software Engineering, AI Academy
-**Repository:** <https://github.com/ParvinSalahov/SWE-final-proj>
+**Team:** SWE Final Project Team  •  **Topic:** 1 — Lost & Found Matching Service  •  **Course:** AI-ENG-110 Software Engineering
 
-## Overview
+**Repository:** https://github.com/ParvinSalahov/SWE-final-proj  •  **Final tag:** `v1.0-final`
 
-The service accepts a photograph and an optional description of a lost or found
-item. It validates the image, stores it, extracts a structured description with
-a VLM, generates an embedding, and persists the item. Matching compares lost
-items with found items (and vice versa) using cosine similarity.
-
-The software-engineering layer is provider-agnostic. The selected online run
-used OpenAI GPT-4o-mini for image descriptions and
-`text-embedding-3-small` for embeddings. Anthropic and Gemini adapters are also
-available through the provider factory.
-
-## Features
-
-- JPEG and PNG validation, including magic-byte and Pillow integrity checks.
-- Five-megabyte upload limit by default.
-- Structured `ItemDescription` validation with Pydantic.
-- FastAPI HTTP API for registration, listing, health checks, and matching.
-- Typer CLI for registration, listing, and match searches.
-- PostgreSQL persistence through SQLAlchemy and filesystem image storage.
-- Bounded asynchronous batch processing with `asyncio.gather()` and a
-  semaphore.
-- Retry with exponential backoff for transient provider failures.
-- In-memory embedding cache with normalized SHA-256 keys.
-- Offline unit/API tests using fake providers and mocked services.
-- Docker image running as a non-root user with an HTTP health check.
+---
 
 ## Quick start
 
-### 1. Install
-
-```powershell
-git clone https://github.com/ParvinSalahov/SWE-final-proj
-cd SWE-final-proj
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+```bash
+# 1. create environment
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-```
 
-### 2. Configure
+# 2. configure runtime
+cp .env.example .env
+# fill provider keys and optional database settings
 
-```powershell
-Copy-Item .env.example .env
-```
+# 3. run smoke tests
+pytest tests/test_ai_smoke.py -v
+pytest -q
 
-Edit `.env` and provide credentials for the selected provider. Never commit
-`.env` or real API keys.
-
-### 3. Start PostgreSQL
-
-```powershell
-docker compose up -d postgres
-```
-
-The compose file exposes PostgreSQL on `localhost:5433`. The application
-expects an async SQLAlchemy connection string in `DATABASE_URL`; use the
-connection format required by your local environment.
-
-### 4. Run the API
-
-```powershell
-uvicorn src.api:app --host 0.0.0.0 --port 8000
-```
-
-Health check:
-
-```powershell
-Invoke-RestMethod http://localhost:8000/
-```
-
-Expected response:
-
-```json
-{
-  "status": "ok",
-  "message": "Smart Lost & Found API is running"
-}
-```
-
-## HTTP API
-
-### Register a lost item
-
-PowerShell:
-
-```powershell
-curl.exe -X POST http://localhost:8000/items/lost `
-  -F "image=@data/lost/backpack_navy.png" `
-  -F "user_text=Navy backpack with a worn front zipper"
-```
-
-### Register a found item
-
-PowerShell:
-
-```powershell
-curl.exe -X POST http://localhost:8000/items/found `
-  -F "image=@data/found/backpack_navy_2.png" `
-  -F "user_text=Blue backpack found near the library"
-```
-
-Successful registration returns HTTP `201` with an item record containing an
-ID, status, description, image path, and creation timestamp.
-
-### List items
-
-```powershell
-curl.exe "http://localhost:8000/items"
-curl.exe "http://localhost:8000/items?status=lost"
-curl.exe "http://localhost:8000/items?status=found"
-```
-
-### Find matches
-
-Replace `<ITEM_ID>` with the ID returned during registration:
-
-```powershell
-curl.exe "http://localhost:8000/items/<ITEM_ID>/matches?k=3"
-```
-
-`k` must be between `1` and `50`. The response contains the query item,
-ranked matches, similarity scores, explanations, and the number of candidates
-evaluated.
-
-## CLI
-
-The CLI talks to the API at `http://localhost:8000` and therefore requires the
-API server to be running.
-
-```powershell
-python -m src.cli --help
-python -m src.cli register-lost --image data/lost/backpack_navy.png --text "Navy backpack"
-python -m src.cli register-found --image data/found/backpack_navy_2.png --text "Blue backpack"
-python -m src.cli search-matches --id <ITEM_ID> --k 3
-python -m src.cli list-items
-python -m src.cli list-items --status lost
-```
-
-Images must exist locally and must be JPEG or PNG files no larger than five
-megabytes. The CLI reports API errors and exits with a non-zero status when the
-server cannot be reached or rejects a request.
-
-## Environment variables
-
-| Variable | Required | Default | Purpose |
-|---|---:|---|---|
-| `LLM_PROVIDER` | Online use | `anthropic` | VLM provider: `anthropic`, `openai`, or `gemini` |
-| `LLM_MODEL` | Online use | `claude-sonnet-4-6` | VLM model identifier |
-| `ANTHROPIC_API_KEY` | If Anthropic selected | empty | Anthropic credentials |
-| `OPENAI_API_KEY` | If OpenAI selected | empty | OpenAI credentials |
-| `GOOGLE_API_KEY` | If Gemini selected | empty | Google Gemini credentials |
-| `EMBEDDING_PROVIDER` | Online use | `openai` | Embedding provider: `openai` or `gemini` |
-| `EMBEDDING_MODEL` | Online use | `text-embedding-3-small` | Embedding model identifier |
-| `DATABASE_URL` | Deployment | local configured value | Async SQLAlchemy database URL |
-| `IMAGE_STORAGE_DIR` | No | `./storage/images` | Filesystem image directory |
-| `MAX_IMAGE_SIZE_MB` | No | `5` | Maximum upload size |
-| `HTTP_HOST` | No | `0.0.0.0` | API bind address |
-| `HTTP_PORT` | No | `8000` | API port |
-| `LOG_LEVEL` | No | `INFO` | Logging level |
-| `AI_MAX_RETRIES` | No | `3` | Maximum transient-error attempts |
-| `AI_RETRY_MIN_WAIT` | No | `1.0` | Initial retry delay in seconds |
-| `AI_RETRY_MAX_WAIT` | No | `8.0` | Maximum retry delay in seconds |
-
-If the selected provider key is missing, the provider adapter raises an
-explicit configuration error. `.env.example` contains variable names but no
-secrets.
-
-## Demo and benchmark
-
-The demo processes the sample lost/found images and prints top matches:
-
-```powershell
-python scripts/demo.py
-```
-
-The committed demo output is [`artefacts/demo_run_output.txt`](artefacts/demo_run_output.txt).
-
-### Sequential versus concurrent benchmark
-
-The benchmark compares the same ten-item registration workload in sequential
-and bounded-concurrent modes. The recorded run used Windows, Python 3.11.9,
-and cleared cache state between phases.
-
-| Workload | N | Sequential | Concurrent | Speedup |
-|---|---:|---:|---:|---:|
-| Registration pipeline | 10 | 0.611 s | 0.061 s | 9.95x |
-
-```powershell
-python scripts/bench.py
-```
-
-The concurrent path uses `asyncio.gather()` and a semaphore. The benchmark
-isolates pipeline overlap; real provider latency, rate limits, and database
-capacity can reduce the observed speedup. In the recorded online run, average
-embedding latency was 0.901 seconds and PostgreSQL was reachable.
-
-The complete output is in
-[`artefacts/bench_run_output.txt`](artefacts/bench_run_output.txt).
-
-## Testing and static analysis
-
-Run the complete test suite with coverage:
-
-```powershell
-python -m pytest --cov=src --cov-report=term-missing -q
-```
-
-Current results:
-
-- **82 tests passed**
-- **91% total coverage for `src`**
-- `src/api.py`: 95% coverage
-- `src/cli.py`: 99% coverage
-- Provided AI smoke tests: passing
-- Tests use fake AI providers, mocked HTTP services, and fake repositories;
-  unit tests do not require network access.
-
-Run type checkers:
-
-```powershell
-python -m mypy src tests
-npx pyright
-```
-
-Current results:
-
-```text
-mypy: Success: no issues found in 22 source files
-pyright: 0 errors, 0 warnings, 0 informations
+# 4. run the demo
+python scripts/demo.py > artefacts/demo_run_output.txt 2>&1
 ```
 
 ## Docker
 
-Build and run the API container:
+```bash
+# build
+docker build -t lost-found-final .
 
-```powershell
-docker build -t lostfound .
-docker run --env-file .env -p 8000:8000 lostfound
+# run the app with env vars and the default HTTP server
+docker run --rm --env-file .env -p 8000:8000 lost-found-final
+
+# run the demo script inside the container
+docker run --rm --env-file .env lost-found-final python scripts/demo.py
 ```
 
-Or start the application and PostgreSQL together:
+If you want the PostgreSQL dependency from `docker-compose.yml`:
 
-```powershell
-docker compose up --build
+```bash
+docker compose up -d
+# then run the app or demo against the database
 ```
 
-The Dockerfile uses a single-stage `python:3.12-slim` image, runs as the
-non-root `appuser`, exposes port `8000`, and checks the health endpoint.
+## Demo command and expected output
 
-## Architecture
+```bash
+python scripts/demo.py > artefacts/demo_run_output.txt 2>&1
+head -n 20 artefacts/demo_run_output.txt
+```
+
+Example output includes ranked candidate matches such as:
 
 ```text
-                    +----------------------+
-                    | CLI / FastAPI HTTP    |
-                    +----------+-----------+
-                               |
-                               v
-                    +----------------------+
-                    | ItemManager          |
-                    | validation + matches |
-                    +----+------------+----+
-                         |            |
-                         v            v
-              +----------------+  +-------------------+
-              | asyncio batch  |  | AIService         |
-              | semaphore      |  | retry/cache/log   |
-              +----------------+  +--------+----------+
-                                           |
-                                           v
-                                  +-------------------+
-                                  | provided ai/      |
-                                  | VLM + embeddings  |
-                                  +-------------------+
-                         +----------------+----------------+
-                         |                                 |
-                         v                                 v
-                +------------------+             +------------------+
-                | PostgreSQL       |             | Filesystem images|
-                | repository       |             | ImageStorage     |
-                +------------------+             +------------------+
+Processing LOST items (mode=online)...
+  - backpack_navy.png: backpack (0.90)
+  - phone_apple_black.png: mobile phone (0.90)
+
+Top matches for LOST item: 'backpack_navy.png'
+  -> backpack_navy_2.png  score=+0.826
+  -> wallet_brown_2.png  score=+0.672
 ```
 
-The provided `ai/` package is isolated behind `AIService`. Domain models and
-repository interfaces keep the core logic independent from HTTP and provider
-SDK details. See [`docs/architecture.md`](docs/architecture.md) for the
-component-level description.
+## Sequential vs concurrent benchmark
 
-## Project layout
+The project benchmark compares a sequential registration loop with the bounded async pipeline in `src/concurrency/pipeline.py`.
+
+| Workload | N | Sequential | Concurrent | Speedup |
+|---|---:|---:|---:|---:|
+| 10 mock item registrations | 10 | 0.5028 s | 0.1009 s | 4.98x |
+
+Reproduce with:
+
+```bash
+python scripts/bench.py
+```
+
+The benchmark is intentionally deterministic and uses mocked work to isolate the concurrency layer rather than external provider latency.
+
+## Testing
+
+```bash
+pytest -q
+```
+
+Current status:
+
+- `82 passed` in the repository test suite
+- provided `tests/test_ai_smoke.py` passes (`27 passed`)
+- static checks:
+  - `python -m mypy src tests scripts --python-version 3.12` → success
+  - `python -m pyright src scripts tests` → 0 errors
+
+## Project structure
 
 ```text
 .
-├── ai/                         # Provided AI package; public interface preserved
+├── ai/                     # provided AI package; contract is fixed
 ├── src/
-│   ├── api.py                  # FastAPI application
-│   ├── cli.py                  # Typer CLI
-│   ├── config.py               # Typed environment settings
-│   ├── models.py               # Pydantic domain/response models
-│   ├── core/                   # ItemManager and business rules
-│   ├── services/               # AI wrapper, retries, cache, logging
-│   ├── concurrency/            # Async bounded batch pipeline
-│   └── storage/                # SQLAlchemy repository and image storage
-├── tests/                      # Unit, API, smoke, and concurrency tests
-├── data/                       # Sample lost/found images
-├── artefacts/                  # Demo and benchmark output
-├── scripts/                    # Demo and benchmark runners
-├── docs/                       # Architecture and project documentation
-├── templates/                  # Official submission templates
+│   ├── config.py           # typed settings via pydantic-settings
+│   ├── core/
+│   ├── services/
+│   ├── concurrency/
+│   ├── storage/
+│   ├── api.py
+│   ├── cli.py
+│   └── models.py
+├── tests/
+├── data/
+├── scripts/
+│   ├── demo.py
+│   └── bench.py
+├── artefacts/
+├── report/
+│   ├── report.tex
+│   └── report.pdf
+├── slides/
+│   ├── slides.tex
+│   └── slides.pdf
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
-├── pyrightconfig.json
-└── README.md
+├── .env.example
+├── README.md
+└── templates/
 ```
 
-## Limitations and future work
+## Architecture summary
 
-- There is no authentication or authorization; production use needs user
-  ownership and access control.
-- The semaphore limits one process only. Multiple workers need a shared
-  provider quota or distributed token bucket.
-- Embedding provider, model, and vector dimension are not stored in the
-  database, so model changes require controlled re-embedding.
-- Provider failover is manual rather than automatic.
-- Text-length limits, tracing, migration tooling, and sustained PostgreSQL
-  load tests should be added before production deployment.
+The system is layered in four clear blocks:
 
-## Submission artefacts
+1. Entry points: CLI and HTTP API call into the business layer.
+2. Core service layer: image validation, AI orchestration, match generation.
+3. Concurrency layer: `asyncio.gather()` plus `asyncio.Semaphore` bounds the number of simultaneous item registrations.
+4. Storage layer: filesystem for uploaded image blobs and SQLAlchemy/SQLite/PostgreSQL-backed persistence for metadata and embeddings.
 
-The official report and defense deck are created from the templates in
-`templates/` and should be added before the final submission:
+## Limitations
 
-```text
-report/report.tex
-report/report.pdf
-slides/slides.tex
-slides/slides.pdf
-```
+- The benchmark isolates the concurrency logic and does not model external AI/provider latency under load.
+- The runtime is still tuned for a single deployment context rather than large multi-instance production scaling.
+- If the provider rate limit is hit repeatedly, the system falls back to retry windows rather than a full distributed queue.
 
-The signed contribution statement is based on
-[`templates/CONTRIBUTION_STATEMENT.md`](templates/CONTRIBUTION_STATEMENT.md).
-The final submission must also include the `v1.0-final` Git tag.
+## AI tooling disclosure
 
-## AI-tool disclosure
-
-AI assistants were used for repository navigation, test scaffolding,
-type-checking fixes, and documentation drafting. The team reviewed generated
-suggestions against the existing interfaces and tests, adapted the code where
-needed, and verified the result with the full test suite, mypy, and Pyright.
-The team can defend the final implementation.
+We used GitHub Copilot to draft selected implementation scaffolds and tests; the team reviewed, adapted, and validated every line before integrating it into the solution.
 
 ## License
 
-This is academic coursework and is not currently distributed as a
-production library.
+Academic coursework project. No external deployment or commercial license is implied.
