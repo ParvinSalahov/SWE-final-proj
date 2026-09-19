@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, cast
 
 import numpy as np
 
@@ -16,7 +15,7 @@ class GeminiVLM(VLMProvider):
     """Gemini 2.x via the google-genai SDK."""
 
     def __init__(self, model: str | None = None, *, api_key: str | None = None) -> None:
-        self.model: str = model or os.getenv("LLM_MODEL") or "gemini-2.0-flash"
+        self.model = model or os.getenv("LLM_MODEL", "gemini-2.0-flash")
         self._api_key = (
             api_key
             or os.getenv("GOOGLE_API_KEY")
@@ -60,7 +59,7 @@ class GeminiVLM(VLMProvider):
             uploaded = self._client.files.upload(file=str(path))
             resp = self._client.models.generate_content(
                 model=self.model,
-                contents=cast(Any, [uploaded, full_prompt]),
+                contents=[uploaded, full_prompt],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json" if json_schema else None,
                 ),
@@ -74,9 +73,7 @@ class GeminiEmbedding(EmbeddingProvider):
     """Gemini embedding model."""
 
     def __init__(self, model: str | None = None, *, api_key: str | None = None) -> None:
-        self.model: str = (
-            model or os.getenv("EMBEDDING_MODEL") or "text-embedding-004"
-        )
+        self.model = model or os.getenv("EMBEDDING_MODEL", "text-embedding-004")
         self._api_key = (
             api_key
             or os.getenv("GOOGLE_API_KEY")
@@ -107,8 +104,6 @@ class GeminiEmbedding(EmbeddingProvider):
         except Exception as e:  # pragma: no cover
             raise ProviderError(f"Gemini embedding call failed: {e}") from e
         # google-genai returns an Embedding object with .values
-        if not resp.embeddings:
-            raise ProviderError("Provider returned no embeddings.")
         vec = np.asarray(resp.embeddings[0].values, dtype=np.float32)
         norm = float(np.linalg.norm(vec))
         if norm == 0.0:

@@ -12,7 +12,6 @@ import base64
 import json
 import os
 from pathlib import Path
-from typing import Any
 
 from ai.providers.base import VLMProvider, ProviderError
 
@@ -40,8 +39,7 @@ class AnthropicVLM(VLMProvider):
                 "The `anthropic` package is required for AnthropicVLM. "
                 "Install it with `pip install anthropic`."
             ) from e
-        anthropic_module: Any = anthropic
-        self._client = anthropic_module.Anthropic(api_key=self._api_key)
+        self._client = anthropic.Anthropic(api_key=self._api_key)
 
     def describe(
         self,

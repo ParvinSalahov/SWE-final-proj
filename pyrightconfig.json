@@ -2,12 +2,12 @@
   "venvPath": ".",
   "venv": "venv",
   "include": [
-    "ai",
     "src",
     "scripts",
     "tests"
   ],
   "exclude": [
+    "ai",
     "venv"
   ],
   "typeCheckingMode": "standard"
