@@ -112,6 +112,9 @@ curl.exe -X POST http://localhost:8000/items/found `
 Successful registration returns HTTP `201` with an item record containing an
 ID, status, description, image path, and creation timestamp.
 
+If an uploaded image exceeds the configured limit, the API returns HTTP `413`
+with a descriptive error message. Invalid or corrupt images return HTTP `400`.
+
 ### List items
 
 ```powershell
@@ -232,6 +235,10 @@ python -m mypy src tests
 npx pyright
 ```
 
+Static analysis is intentionally scoped to project-owned code. The supplied
+`ai/` package is kept unchanged; [`mypy.ini`](mypy.ini) and
+[`pyrightconfig.json`](pyrightconfig.json) configure the checkers accordingly.
+
 Current results:
 
 ```text
@@ -318,6 +325,7 @@ component-level description.
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
+├── mypy.ini
 ├── pyrightconfig.json
 └── README.md
 ```
